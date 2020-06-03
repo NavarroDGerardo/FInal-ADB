@@ -20,14 +20,24 @@ db.list_collection_names()
 [u'cast']
 [u'info']
 
-#for title in titles.find():
-    #pprint.pprint(title)
-#Redis connection
-
-#API for queries
 option_1 = 0
 option_2 = 0
 option_3 = 0
+
+
+def browser(collection, input, category, number):
+    if number ==  True:
+        mSearch = int(input)
+    else:
+        mSearch = input
+    if not redisClient.exists(collection+input):
+        result = titles.find_one({category: mSearch})
+        print("Adding to redis")
+        redisClient.set("movies_"+input, str(result))   
+    else:
+        print("Extracted from cache")
+        result = redisClient.get(collection+input).decode("UTF-8")
+    print(result)
 
 while option_1 != 5:
     print("----------Instruction--------")
@@ -50,25 +60,11 @@ while option_1 != 5:
             print(" ")
             option_2 = int(input("Select an option: "))
             if option_2 == 1:
-                
                 titleName = input("Write the name of the title: ")
-
-                #If the movie is not in redis, add it 
-                if not redisClient.exists("movies_"+titleName):
-                    result = titles.find_one({"title": titleName})
-                    movie_id = result["show_id"]
-                    movie_description = result["description"]
-                    print("Adding to redis")
-                    redisClient.set("movies_"+titleName, str(result))
-                #Else, just print it    
-                else:
-                    print("Extracted from cache")
-                    result = redisClient.get("movies_"+titleName).decode("UTF-8")
-                print(result)
-
+                browser("movies_", titleName, "title", False)
             elif option_2 == 2:
                 show_id = int(input("Write the id of the movie: "))
-                pprint.pprint(titles.find_one({"show_id": show_id}))
+                browser("movies_", str(show_id), "show_id", True)
             elif option_2 == 3:
                 description = input("Write the description of the title: ")
                 pprint.pprint(titles.find_one({"description": description}))
