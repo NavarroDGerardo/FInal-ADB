@@ -3,7 +3,10 @@ from pymongo import MongoClient
 import pprint
 import redis
 
+
+#Intitializing the clients 
 client = MongoClient('localhost', 27017)
+redisClient = redisClient = redis.Redis(host="localhost",port=6379)
 db = client.Netflix
 
 #Definition Of tables
@@ -47,9 +50,22 @@ while option_1 != 5:
             print(" ")
             option_2 = int(input("Select an option: "))
             if option_2 == 1:
+                
                 titleName = input("Write the name of the title: ")
-                #pregutarle al cache y si no esta llenar la data en el cache
-                pprint.pprint(titles.find_one({"title": titleName}))
+
+                #If the movie is not in redis, add it 
+                if not redisClient.exists("movies_"+titleName):
+                    result = titles.find_one({"title": titleName})
+                    movie_id = result["show_id"]
+                    movie_description = result["description"]
+                    print("Adding to redis")
+                    redisClient.set("movies_"+titleName, str(result))
+                #Else, just print it    
+                else:
+                    print("Extracted from cache")
+                    result = redisClient.get("movies_"+titleName).decode("UTF-8")
+                print(result)
+
             elif option_2 == 2:
                 show_id = int(input("Write the id of the movie: "))
                 pprint.pprint(titles.find_one({"show_id": show_id}))
@@ -160,6 +176,8 @@ while option_1 != 5:
                         tp = "Movie"  
                     if t_type == 2:
                         tp = "TV Show"
+
+                    
                     
                     command = [{'$match':{"type":tp}},{'$lookup':{'from':"Title",'localField':"show_id",'foreignField':"show_id",'as':"movies"}},
                     {'$unwind':"$movies"},{'$project':{'_id':0,"show_id":1,"movies.title":1}},{'$limit':10}]
