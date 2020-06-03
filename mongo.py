@@ -2,6 +2,7 @@ import pymongo
 from pymongo import MongoClient
 import pprint
 import redis
+import time
 
 
 #Intitializing the clients 
@@ -67,7 +68,7 @@ while option_1 != 5:
                 browser("movies_", str(show_id), "show_id", True)
             elif option_2 == 3:
                 description = input("Write the description of the title: ")
-                pprint.pprint(titles.find_one({"description": description}))
+                browser("movies_", description, "description", False)
     elif option_1 == 2:
         while option_3 != 4:
             print(" ")
@@ -87,7 +88,7 @@ while option_1 != 5:
                 print("3. exit option")
                 print(" ")
 
-                cast_option = (int)(input("Select an option: "))
+                cast_option = int(input("Select an option: "))
                 command = ""
                 if cast_option == 1:
                     print("")
@@ -104,6 +105,11 @@ while option_1 != 5:
                 "cast":1,"movies.title":1}}]
                 if command != "":
                   for doc in (cast.aggregate(command)):
+
+                    #Aqui va el Set de Sets para imprimirlos#
+                    #titles_"nombre del director"
+                    #buscar si existe#
+
                     pprint.pprint(doc)
             elif option_3 == 2:
                 #country
