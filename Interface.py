@@ -4,13 +4,10 @@ import pprint
 import redis
 import time
 
-
-#Intitializing the clients 
 client = MongoClient('localhost', 27017)
 redisClient = redisClient = redis.Redis(host="localhost",port=6379)
 db = client.Netflix
 
-#Definition Of tables
 titles = db.Title
 types = db.Type
 cast = db.Cast
@@ -21,9 +18,7 @@ db.list_collection_names()
 [u'cast']
 [u'info']
 
-option_1 = 0
-option_2 = 0
-option_3 = 0
+search_option = 0
 
 
 def browser(collection, input, category, number):
@@ -34,54 +29,76 @@ def browser(collection, input, category, number):
     if not redisClient.exists(collection+input):
         result = titles.find_one({category: mSearch})
         print("Adding to redis")
-        redisClient.set("movies_"+input, str(result))   
+        redisClient.set("movies_"+input, str(result)) 
+        redisClient.expire("movies_"+input, 300)  
     else:
         print("Extracted from cache")
         result = redisClient.get(collection+input).decode("UTF-8")
     print(result)
 
-def searchForGroup(director_name, command, key):
-    if not redisClient.sismember(key, director_name):
+def searchForGroup(info_input, command, key, collection):
+    if not redisClient.sismember(key, info_input):
         print("Not in the cache")
-        for doc in (cast.aggregate(command)):
-            redisClient.rpush(director_name, str(doc))
-        redisClient.sadd(key, director_name)
+        for doc in (collection.aggregate(command)):
+            redisClient.rpush(info_input, str(doc))
+        redisClient.sadd(key, info_input)
+        redisClient.expire(key, 300)
+        redisClient.expire(info_input, 300)
     else:
         print("Extracted from the cache")
-    for i in range(0, redisClient.llen(director_name)):
-        print(redisClient.lindex(director_name, i))
+    for i in range(0, redisClient.llen(info_input)):
+        print(redisClient.lindex(info_input, i))
 
-while option_1 != 5:
+def SearchStadistics(collection, input, category, number, mongoCollection, keyName):
+    if number ==  True:
+        mSearch = int(input)
+    else:
+        mSearch = input
+    if not redisClient.exists(collection+input):
+        result = mongoCollection.count({category: mSearch})
+        print("Not in cache")
+        print("Adding to cache")
+        redisClient.set(keyName+input, str(result))
+        redisClient.expire(keyName+input, 300)
+    else:
+        print("Extracted from cache")
+        result = redisClient.get(collection+input).decode("UTF-8")
+    print(result)
+
+
+while search_option != 5:
     print("----------Instruction--------")
     print(" ")
-    print("1. Search for a specific data")
-    print("2. Search for a group")
+    print("1. Search for a movie by movie's info")
+    print("2. Search for a movies by extra info of the movie")
     print("3. obtain statistics about the database")
     print("4. add or update an entity in the database")
     print("5. Nevermind")
     print(" ")
 
-    option_1 = int(input("Select an option: "))
-    if option_1 == 1:
-        while option_2 != 4:
+    search_option = int(input("Select an option: "))
+    if search_option == 1:
+        search_movie = 0
+        while search_movie != 4:
             print(" ")
             print("1. Search movie information by tittle")
             print("2. Search movie information by id")
             print("3. Search by description")
             print("4. exit option")
             print(" ")
-            option_2 = int(input("Select an option: "))
-            if option_2 == 1:
+            search_movie = int(input("Select an option: "))
+            if search_movie == 1:
                 titleName = input("Write the name of the title: ")
                 browser("movies_", titleName, "title", False)
-            elif option_2 == 2:
+            elif search_movie == 2:
                 show_id = int(input("Write the id of the movie: "))
                 browser("movies_", str(show_id), "show_id", True)
-            elif option_2 == 3:
+            elif search_movie == 3:
                 description = input("Write the description of the title: ")
                 browser("movies_", description, "description", False)
-    elif option_1 == 2:
-        while option_3 != 4:
+    elif search_option == 2:
+        option_input = 0
+        while option_input != 4:
             print(" ")
             print("1. search by cast")
             print("2. search by info")
@@ -89,8 +106,8 @@ while option_1 != 5:
             print("4. exit option")
             print(" ")
 
-            option_3 = int(input("Select an option: "))
-            if option_3 == 1:
+            option_input = int(input("Select an option: "))
+            if option_input == 1:
                 cast_option = 0
                 while cast_option >= 0 and cast_option < 3:
                     print(" ")
@@ -107,7 +124,7 @@ while option_1 != 5:
                         print("")
                         command = [{'$match':{"director":director_name}},{'$lookup':{'from':"Title",'localField':"show_id",'foreignField':"show_id",'as':"movies"}},
                             {'$unwind':"$movies"},{'$project':{'_id':0,"director":1,"movies.title":1}}]
-                        searchForGroup(director_name, command, "directors_movies")
+                        searchForGroup(director_name, command, "directors_movies", cast)
                         #https://pythontic.com/database/redis/list
                     elif cast_option == 2:
                         print("")
@@ -116,8 +133,8 @@ while option_1 != 5:
                         command = [{'$match':{"cast":cast_name}},{'$lookup':{'from':"Title",'localField':"show_id",
                         'foreignField':"show_id",'as':"movies"}},{'$unwind':"$movies"},{'$project':{'_id':0,"show_id":1,
                         "cast":1,"movies.title":1}}]
-                        searchForGroup(cast_name, command, "cast_movies")
-            elif option_3 == 2:
+                        searchForGroup(cast_name, command, "cast_movies", cast)
+            elif option_input == 2:
                 info_result = 0
                 while info_result >= 0 and info_result < 5:
                     print("")
@@ -158,8 +175,8 @@ while option_1 != 5:
                         command = [{'$match':{"duration":info_input}},{'$lookup':{'from':"Title",'localField':"show_id",'foreignField':"show_id",'as':"movies"}},
                         {'$unwind':"$movies"},{'$project':{'_id':0,"duration":1,"movies.title":1}}]
                         key = "duration_movies"
-                    searchForGroup(info_input, command, key)
-            elif option_3 == 3:
+                    searchForGroup(info_input, command, key, info)
+            elif option_input == 3:
                 category = 0
                 while category >= 0 and category < 4:
                     print("")
@@ -187,82 +204,93 @@ while option_1 != 5:
                         command = [{'$match':{"listed_in":type_input}},{'$lookup':{'from':"Title",'localField':"show_id",'foreignField':"show_id",'as':"movies"}},
                         {'$unwind':"$movies"},{'$project':{'_id':0,"show_id":1,"movies.title":1}},{'$limit':10}]
                         key = "listed_movies"
-                    searchForGroup(type_input, command, key)
-    elif option_1 == 3:
-         #Three Queries to obtain statistics about the database
-        print("1. Show how many TV Shows there are")
-        print("2. ")
-        print("3. ")
-
-        qa = (int)(input("Select an option: "))
-        if qa == 1:
-        #Query to obtain how many TV Shows are in the database
-          print("This is the total number of TV Shows")
-          pprint.pprint(types.find({"type": "TV Show"}).count()) 
-        if qa == 2:
-            print("Todavia en construccion")
-        if qa == 3:
-
-            print("Todavia en construccion")
-   
-         
-    elif option_1 == 4:
-        #One query to add or update an entity in the database
+                    searchForGroup(type_input, command, key, types)
+    elif search_option == 3:
+        option_stats = 0
+        while option_stats != 5:
+            print("1. Show how many TV Shows there are")
+            print("2. The total number of mexican titles ")
+            print("3. Total titles released in 2016")
+            print("4. Get the maxmeory of the cache")
+            print("5. Exit option")
+            option_stats = (int)(input("Select an option: "))
+            if option_stats == 1:
+                key_q = "TV Show"
+                print("This is the total number of TV Shows")
+                SearchStadistics("Tvshows_", key_q, "type", False, types, "Tvshows_")
+            elif option_stats == 2:
+                key_q = "Mexico"; 
+                print("The total number of mexican titles")
+                SearchStadistics("MexTitles_", key_q, "country", False, info, "MexTitles_")
+            elif option_stats == 3:
+                key_q = "2016";  
+                print("Titles released in 2016")
+                SearchStadistics("ReleaseTitle_", key_q, "release_year", False, info, "ReleaseTitle_")
+            elif option_stats == 4:
+                print(redisClient.config_get('maxmemory'))
+    elif search_option == 4:
         print("")
-        print("To insert a new title we need to add data in all the collections")
-        print("")
+        print("This will erase all the data from the cache, will you like to continue...?")
+        print("1. Yes")
+        print("2. No")
+        decision = 0
+        decision = int(input("Select an option: "))
+        if decision == 1:
+            print("")
+            print("To insert a new title we need to add data in all the collections")
+            print("")
 
-        print("=======Title data=========")
-        print("")
-        sh_id = int(input("Enter the show id: "))
-        title = input("Enter the title: ")
-        description = input("Enter the description of the title")
+            print("=======Title data=========")
+            print("")
+            sh_id = int(input("Enter the show id: "))
+            title = input("Enter the title: ")
+            description = input("Enter the description of the title")
 
-        new_title = {"show_id": sh_id, "title": title,"description": description}
-        title_id = titles.insert_one(new_title).inserted_id
+            new_title = {"show_id": sh_id, "title": title,"description": description}
+            title_id = titles.insert_one(new_title).inserted_id
 
-        print(" ")
-        print(title_id)
-        print("")
+            print(" ")
+            print(title_id)
+            print("")
 
-        print("=======Info of the title data=========")
-        print("")
-        country_name = input("Enter the country: ")
-        date_added = input("Enter the date added: ")
-        release_y = input("Enter the release yer: ")
-        duration = input("Enter the duration: ")
+            print("=======Info of the title data=========")
+            print("")
+            country_name = input("Enter the country: ")
+            date_added = input("Enter the date added: ")
+            release_y = input("Enter the release yer: ")
+            duration = input("Enter the duration: ")
 
-        new_info = {"show_id": sh_id, "country": country_name,"date_added": date_added, "release_year": release_y, "duration": duration}
-        info_id = info.insert_one(new_info).inserted_id
+            new_info = {"show_id": sh_id, "country": country_name,"date_added": date_added, "release_year": release_y, "duration": duration}
+            info_id = info.insert_one(new_info).inserted_id
 
-        print(" ")
-        print(info_id)
-        print("")
+            print(" ")
+            print(info_id)
+            print("")
 
-        print("=======Cast of the title data=========")
-        print("")
-        director_n = input("Enter the director's name: ")
-        cast_crew = input("Enter the  cast's name: ")
+            print("=======Cast of the title data=========")
+            print("")
+            director_n = input("Enter the director's name: ")
+            cast_crew = input("Enter the  cast's name: ")
 
-        new_cast = {"show_id": sh_id, "diretor":director_n, "cast":cast_crew}
-        cast_id = cast.insert_one(new_cast).inserted_idvv
+            new_cast = {"show_id": sh_id, "diretor":director_n, "cast":cast_crew}
+            cast_id = cast.insert_one(new_cast).inserted_idvv
 
-        print(" ")
-        print(cast_id)
-        print("")
+            print(" ")
+            print(cast_id)
+            print("")
 
-        print("=======Type of the title data=========")
-        print("")
-        type_input = input("Enter the tyoe: ")
-        rat_in = input("Enterrating: ")
-        list_in = input("Enter the listed in: ")
+            print("=======Type of the title data=========")
+            print("")
+            type_input = input("Enter the tyoe: ")
+            rat_in = input("Enterrating: ")
+            list_in = input("Enter the listed in: ")
 
-        new_type = {"show_id": sh_id, "type":type_input, "rating":rat_in, "listed_in":list_in}
-        type_id = types.insert_one(new_type).inserted_id
+            new_type = {"show_id": sh_id, "type":type_input, "rating":rat_in, "listed_in":list_in}
+            type_id = types.insert_one(new_type).inserted_id
 
-        print(" ")
-        print(type_id)
-        print("")
-        
-        #https://api.mongodb.com/python/current/tutorial.html
+            print(" ")
+            print(type_id)
+            print("")
 
+redisClient.close()
+client.close()
